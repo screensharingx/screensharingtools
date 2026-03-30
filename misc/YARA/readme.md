@@ -1,1 +1,1 @@
-star repo: https://github.com/InQuest/awesome-yara
+really useful repo: https://github.com/InQuest/awesome-yara
