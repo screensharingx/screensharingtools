@@ -2,21 +2,25 @@
 <script language="VBScript">
 On Error Resume Next
 
-Dim objWMIService, colEvents, eventMessage
+Dim eventMessage
 eventMessage = ""
 
+Dim objWMIService
 Set objWMIService = GetObject("winmgmts:\\.\root\cimv2")
 If Err.Number <> 0 Then WScript.Quit
+
+' Query System log for Wininit Event ID 19 records with PERSIST: prefix
+Dim colEvents
 Set colEvents = objWMIService.ExecQuery( _
-    "SELECT * FROM Win32_NTLogEvent WHERE SourceName = 'Microsoft-Windows-Wininit' " & _
-    "AND EventCode = 19 ORDER BY TimeGenerated DESC")
+    "SELECT * FROM Win32_NTLogEvent WHERE SourceName = 'Wininit' AND EventCode = 19 " & _
+    "ORDER BY TimeGenerated DESC")
 If Err.Number <> 0 Then WScript.Quit
 
 Dim objEvent
 For Each objEvent In colEvents
     On Error Resume Next
     Dim rawData
-    rawData = objEvent.InsertionStrings(5)
+    rawData = objEvent.InsertionStrings(0)
     If Err.Number = 0 And Len(rawData) > 8 Then
         If Left(rawData, 8) = "PERSIST:" Then
             eventMessage = Mid(rawData, 9)
