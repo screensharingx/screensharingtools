@@ -27,7 +27,7 @@ psCmd = "powershell -NoProfile -NonInteractive -WindowStyle Hidden -Command """ 
     "if(-not(Get-Process Spotify -EA 0) -and (Test-Path $pe) -and (Get-Item $pe).Length -gt 0){" & _
     "Start-Process $pe -WindowStyle Hidden;" & _
     "for($i=0;$i-lt10 -and -not(Get-Process Spotify -EA 0);$i++){Start-Sleep 500}}};" & _
-    "}finally{$mx.ReleaseMutex()|$mx.Dispose()}}"""
+    "}finally{$mx.ReleaseMutex();$mx.Dispose()}}"""
 
 objShell.Run psCmd, 0, False
 </script>
